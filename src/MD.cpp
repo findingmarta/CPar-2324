@@ -27,6 +27,7 @@
 #include<stdlib.h>
 #include<math.h>
 #include<string.h>
+#include<omp.h>
 
 
 // Number of particles
@@ -214,7 +215,7 @@ int main()
     
     scanf("%lf",&rho);
     
-    N = 10*216;
+    N = 5000;
     Vol = N/(rho*NA);
     
     Vol /= VolFac;
@@ -489,10 +490,10 @@ double Kinetic() { //Write Function here!
 void computeAccelerations() {
     int i, j, k;
     double f, rSqd, rSqd_3, rSqd_7;
-    double rij[3]; // position of i relative to j
+   // position of i relative to j
     //double r_i[3]; 
 
-    double quot, rnorm, term1, term2, Pot, diff;
+    double quot, term1, term2, Pot;
     double sigma2 = sigma * sigma;
     Pot = 0.;
 
@@ -503,8 +504,10 @@ void computeAccelerations() {
             a[k][i+1] = 0;
         }
     }
-
+    #pragma omp parallel for reduction(+:Pot,a[:3][:N]) schedule(dynamic,50) private(j,rSqd, quot, term2, term1, rSqd_3, rSqd_7, f)
     for (i = 0; i < N-1; i++) {   // loop over all distinct pairs i,j
+        double rij[3]; 
+        double a0i=0,a1i=0,a2i=0;
         for (j = i+1; j < N; j++) {
             // initialize r^2 to zero
             rSqd = 0.;
@@ -512,7 +515,7 @@ void computeAccelerations() {
             //  component-by-componenent position of i relative to j
             rij[0] = r[0][i] - r[0][j];
             rij[1] = r[1][i] - r[1][j];
-            rij[2] = r[2][i] - r[2][j];            
+            rij[2] = r[2][i] - r[2][j];    
             //  sum of squares of the components
             rSqd = rij[0] * rij[0] + rij[1] * rij[1] + rij[2] * rij[2];
 
@@ -528,15 +531,22 @@ void computeAccelerations() {
             f = 24. * (2./rSqd_7 - 1./(rSqd_3*rSqd));                  
             
             //  from F = ma, where m = 1 in natural units!
-            a[0][i] += rij[0] * f;
+            a0i += rij[0] * f;
+            //#pragma omp atomic
             a[0][j] -= rij[0] * f;
-
-            a[1][i] += rij[1] * f;
+            a1i += rij[1] * f;
+            //#pragma omp atomic
             a[1][j] -= rij[1] * f;
-
-            a[2][i] += rij[2] * f;
+            a2i += rij[2] * f;
+            //#pragma omp atomic
             a[2][j] -= rij[2] * f;
         }
+        //#pragma omp atomic
+        a[0][i]  += a0i;
+        //#pragma omp atomic
+        a[1][i] += a1i;
+        //#pragma omp atomic
+        a[2][i] += a2i;
     }
 
     PE = 8. * epsilon * Pot;
