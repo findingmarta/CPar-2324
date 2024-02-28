@@ -1,25 +1,50 @@
-CC = gcc
-SRC = src/
-CFLAGS = -g -Wall -pg -Ofast -ftree-vectorize -mavx -mfpmath=sse -march=x86-64 -fno-omit-frame-pointer
+################################################################################
+# Makefile for general code snippets
+#
+# by André Pereira
+################################################################################
 
-.DEFAULT_GOAL = MD.exe
+SHELL = /bin/sh
+BIN_NAME = MDcuda
 
-MD.exe: $(SRC)/MD.cpp
-	$(CC) $(CFLAGS) $(SRC)MD.cpp -lm -fopenmp -o MD.exe
+CXX = nvcc
+LD  = nvcc
+
+CXXFLAGS   = -O2 -g -std=c++11 -arch=sm_35 -Wno-deprecated-gpu-targets 
+
+SRC_DIR = src
+BIN_DIR = bin
+BUILD_DIR = build
+SRC = $(wildcard $(SRC_DIR)/*.cu)
+OBJ = $(patsubst src/%.cu,build/%.o,$(SRC))
+BIN = $(BIN_NAME)
+
+vpath %.cu $(SRC_DIR)
+
+################################################################################
+# Rules
+################################################################################
+
+.DEFAULT_GOAL = all
+
+$(BUILD_DIR)/%.o: %.cu
+	module load gcc/7.2.0;\
+	module load cuda/11.3.1;\
+	$(CXX) -c $(CXXFLAGS) $(INCLUDES) $< -o $@ $(LIBS)
+
+$(BIN_DIR)/$(BIN_NAME): $(OBJ)
+	module load gcc/7.2.0;\
+	module load cuda/11.3.1;\
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ $(OBJ) $(LIBS)
+
+checkdirs:
+	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $(BIN_DIR)
+
+all: checkdirs $(BIN_DIR)/$(BIN_NAME)
 
 clean:
-	rm -f ./MD.exe
-	rm -f ./cp_average.txt
-	rm -f ./cp_output.txt
-	rm -f ./cp_traj.xyz
-	rm -f ./.png
-	rm -f ./.out
+	rm -f $(BUILD_DIR)/* $(BIN_DIR)/* 
 
-run: MD.exe
-	perf stat -e instructions,cycles,cache-misses ./MD.exe < inputdata.txt
-
-perf: 
-	sbatch perf.sh
-
-runn:
+run:
 	sbatch run.sh
